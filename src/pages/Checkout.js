@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import axios from "axios";
 
 function Checkout() {
   const navigate = useNavigate();
@@ -9,57 +10,79 @@ function Checkout() {
 
   const [address, setAddress] = useState("");
   const [paymentType, setPaymentType] = useState("card");
-  const [cardType, setCardType] = useState("Visa");
   const [cardNumber, setCardNumber] = useState("");
 
   if (!product) {
     return <h2>No product selected</h2>;
   }
 
-  let total = product.price;
-  let discount = 0;
-  let deliveryCharge = 0;
-
-  if (paymentType === "card") {
-    discount = 200;
-  }
-
-  if (paymentType === "cash") {
-    deliveryCharge = 50;
-  }
+  const total = product.price;
+  const discount = paymentType === "card" ? 200 : 0;
+  const deliveryCharge = paymentType === "cash" ? 50 : 0;
 
   const finalTotal = total - discount + deliveryCharge;
 
-  const placeOrder = () => {
-    if (!address) {
-      alert("Enter delivery address");
-      return;
-    }
+  const normalizePhone = (rawPhone) => {
+    if (!rawPhone) return "";
+    const digits = rawPhone.replace(/\D/g, "");
+    if (digits.length === 10) return `+91${digits}`;
+    if (digits.length === 11 && digits.startsWith("0")) return `+91${digits.slice(1)}`;
+    if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
+    if (digits.startsWith("+") && digits.length >= 11) return rawPhone;
+    return "";
+  };
 
-    if (paymentType === "card" && !cardNumber) {
-      alert("Enter card number");
-      return;
-    }
+  const placeOrder = async () => {
+    try {
+      if (!address) {
+        alert("Enter address");
+        return;
+      }
 
-    navigate("/track");
+      const raw = localStorage.getItem("userPhone") || "";
+      const phone = normalizePhone(raw);
+
+      if (!phone) {
+        alert("Enter a valid phone number in the login screen before placing order");
+        return;
+      }
+
+      const res = await axios.post("http://localhost:5000/send-sms", {
+        phone,
+        product: product.title || product.name,
+        price: finalTotal,
+      });
+
+      console.log("BACKEND RESPONSE:", res.data);
+
+      if (res.data.success) {
+        const message = res.data.mock
+          ? "✅ Order placed & SMS sent (MOCK - check backend logs) 📱"
+          : "✅ Order placed & SMS sent 📱";
+        alert(message);
+        navigate("/track");
+      } else {
+        alert(`❌ SMS failed: ${res.data.error || res.data.message || "unknown error"}`);
+      }
+
+    } catch (error) {
+      const backendError = error.response?.data?.error || error.response?.data?.message;
+      console.log("ERROR:", error.response?.data || error.message);
+      alert(`❌ Server error / SMS failed${backendError ? `: ${backendError}` : ""}`);
+    }
   };
 
   return (
     <div className="box">
-      <h2>Product </h2>
+      <h2>Product</h2>
 
-      {/* Product */}
-      <img
-        src={product.image}
-        alt={product.name}
-        style={{ width: "150px" }}
-      />
-      <h3>{product.name}</h3>
+      <img src={product.image} alt="product" style={{ width: "150px" }} />
+
+      <h3>{product.title || product.name}</h3>
       <p>Price: ₹{product.price}</p>
 
       <hr />
 
-      {/* Address */}
       <input
         placeholder="Delivery Address"
         value={address}
@@ -75,7 +98,7 @@ function Checkout() {
           checked={paymentType === "card"}
           onChange={(e) => setPaymentType(e.target.value)}
         />
-        Card Payment
+        Card
       </label>
 
       <label>
@@ -85,38 +108,15 @@ function Checkout() {
           checked={paymentType === "cash"}
           onChange={(e) => setPaymentType(e.target.value)}
         />
-        Cash on Delivery
+        Cash
       </label>
 
-      {/* Card options */}
       {paymentType === "card" && (
-        <>
-          <select
-            value={cardType}
-            onChange={(e) => setCardType(e.target.value)}
-          >
-            <option>SBI</option>
-            <option>ICIC</option>
-            <option>RuPay</option>
-            <option>Axies</option>
-          </select>
-
-          <input
-            placeholder="Card Number"
-            value={cardNumber}
-            onChange={(e) => setCardNumber(e.target.value)}
-          />
-
-          <p style={{ color: "green" }}>
-            Card Discount: -₹{discount}
-          </p>
-        </>
-      )}
-
-      {paymentType === "cash" && (
-        <p style={{ color: "red" }}>
-          Delivery Charges: +₹{deliveryCharge}
-        </p>
+        <input
+          placeholder="Card Number"
+          value={cardNumber}
+          onChange={(e) => setCardNumber(e.target.value)}
+        />
       )}
 
       <h2>Total: ₹{finalTotal}</h2>

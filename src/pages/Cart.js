@@ -13,7 +13,9 @@ function Cart() {
           <h3>{item.name}</h3>
           <p>₹{item.price}</p>
         </div>
+        
       ))}
+      
     </div>
   );
 }
